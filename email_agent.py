@@ -3,15 +3,23 @@ import json
 from datetime import datetime
 from dotenv import load_dotenv
 from gmail_client import GmailClient
-from email_classifier import EmailClassifier, EmailSummarizer
+from email_classifier import EmailClassifier, EmailSummarizer, LLMFactory
 
 load_dotenv()
 
 class EmailAgent:
-    def __init__(self):
+    def __init__(self, provider: str = None, model: str = None):
+        """
+        邮件整理Agent
+        
+        Args:
+            provider: 模型提供商，不填则从环境变量读取
+            model: 模型名称，不填则使用提供商默认
+        """
         self.gmail = GmailClient()
-        self.classifier = EmailClassifier()
-        self.summarizer = EmailSummarizer()
+        # 使用指定的模型
+        self.classifier = EmailClassifier(provider=provider, model=model)
+        self.summarizer = EmailSummarizer(provider=provider, model=model)
         self.stats = {
             'total': 0,
             'spam': 0,
@@ -19,6 +27,10 @@ class EmailAgent:
             'normal': 0
         }
         self.important_emails_summary = []
+        
+        # 打印当前使用的模型
+        current_provider = provider or os.getenv("LLM_PROVIDER", "openai")
+        print(f"🤖 使用模型提供商: {current_provider.upper()}")
         
     def process_emails(self, max_emails=20):
         """处理邮件"""
@@ -90,7 +102,6 @@ class EmailAgent:
             
         else:  # normal
             # 正常邮件按发件人归档
-            # 提取发件人名称
             sender_name = email['sender'].split('<')[0].strip()
             if len(sender_name) > 30:
                 sender_name = sender_name[:30]
@@ -140,7 +151,11 @@ class EmailAgent:
         print(f"\n💾 详细报告已保存到: email_processing_report.json")
 
 def main():
-    agent = EmailAgent()
+    # 可以在这里指定模型，也可以什么都不传，从环境变量读取
+    agent = EmailAgent()  # 默认从 .env 配置
+    # agent = EmailAgent(provider="deepseek")  # 强制使用 DeepSeek
+    # agent = EmailAgent(provider="openai", model="gpt-4")  # 指定提供商和具体模型
+    
     agent.process_emails(max_emails=20)
 
 if __name__ == "__main__":

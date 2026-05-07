@@ -4,9 +4,48 @@ from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Dict, Any
 
 load_dotenv()
+
+# 支持的模型提供商配置
+MODEL_PROVIDERS = {
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-3.5-turbo",
+        "api_key_env": "OPENAI_API_KEY"
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com",
+        "default_model": "deepseek-chat",
+        "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "azure": {
+        "base_url": "https://your-resource.openai.azure.com/",
+        "default_model": "gpt-35-turbo",
+        "api_key_env": "AZURE_OPENAI_API_KEY"
+    },
+    "zhipu": {  # 智谱AI
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "default_model": "glm-4",
+        "api_key_env": "ZHIPU_API_KEY"
+    },
+    "qwen": {  # 通义千问
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "default_model": "qwen-plus",
+        "api_key_env": "DASHSCOPE_API_KEY"
+    },
+    "moonshot": {  # 月之暗面
+        "base_url": "https://api.moonshot.cn/v1",
+        "default_model": "moonshot-v1-8k",
+        "api_key_env": "MOONSHOT_API_KEY"
+    },
+    "ollama": {  # 本地 Ollama
+        "base_url": "http://localhost:11434/v1",
+        "default_model": "qwen:7b",
+        "api_key_env": "OLLAMA_API_KEY"  # 可以随便填，Ollama不需要真的key
+    }
+}
 
 class EmailClassification(BaseModel):
     """邮件分类结果"""
@@ -16,13 +55,61 @@ class EmailClassification(BaseModel):
     priority: Optional[int] = Field(description="重要通知的优先级，1-5，5最高")
     summary: Optional[str] = Field(description="邮件内容摘要（仅重要邮件需要）")
 
+class LLMFactory:
+    """LLM 工厂类，用于创建不同提供商的 LLM 实例"""
+    
+    @staticmethod
+    def create_llm(provider: str = None, model: str = None, **kwargs) -> ChatOpenAI:
+        """
+        创建 LLM 实例
+        
+        Args:
+            provider: 模型提供商 (openai/deepseek/azure/zhipu/qwen/moonshot/ollama)
+            model: 具体模型名称，不填则使用默认
+            **kwargs: 其他参数传递给 ChatOpenAI
+        """
+        # 如果没指定 provider，从环境变量读取
+        if provider is None:
+            provider = os.getenv("LLM_PROVIDER", "openai").lower()
+        
+        if provider not in MODEL_PROVIDERS:
+            raise ValueError(f"不支持的模型提供商: {provider}。支持的提供商: {list(MODEL_PROVIDERS.keys())}")
+        
+        config = MODEL_PROVIDERS[provider]
+        api_key = os.getenv(config["api_key_env"], "")
+        
+        # 如果没指定 model，使用默认
+        if model is None:
+            model = os.getenv(f"{provider.upper()}_MODEL", config["default_model"])
+        
+        # 构建 LLM 配置
+        llm_kwargs = {
+            "temperature": kwargs.get("temperature", 0),
+            "model_name": model,
+            "openai_api_key": api_key,
+            "openai_api_base": config["base_url"],
+        }
+        
+        # Azure 特殊配置
+        if provider == "azure":
+            llm_kwargs["model_kwargs"] = {"engine": model}
+        
+        # 支持传入的额外参数
+        llm_kwargs.update(kwargs)
+        
+        return ChatOpenAI(**llm_kwargs)
+
 class EmailClassifier:
-    def __init__(self):
-        self.llm = ChatOpenAI(
-            temperature=0,
-            model_name="gpt-3.5-turbo",
-            openai_api_key=os.getenv("OPENAI_API_KEY")
-        )
+    def __init__(self, provider: str = None, model: str = None):
+        """
+        邮件分类器
+        
+        Args:
+            provider: 模型提供商，不填则从环境变量 LLM_PROVIDER 读取
+            model: 模型名称，不填则使用提供商默认
+        """
+        # 创建 LLM 实例
+        self.llm = LLMFactory.create_llm(provider=provider, model=model, temperature=0)
         self.parser = PydanticOutputParser(pydantic_object=EmailClassification)
         
         self.prompt = ChatPromptTemplate.from_template("""
@@ -69,12 +156,8 @@ class EmailClassifier:
 
 class EmailSummarizer:
     """重要邮件摘要生成器"""
-    def __init__(self):
-        self.llm = ChatOpenAI(
-            temperature=0.3,
-            model_name="gpt-3.5-turbo",
-            openai_api_key=os.getenv("OPENAI_API_KEY")
-        )
+    def __init__(self, provider: str = None, model: str = None):
+        self.llm = LLMFactory.create_llm(provider=provider, model=model, temperature=0.3)
         
         self.prompt = ChatPromptTemplate.from_template("""
 请为以下重要邮件生成一个简洁的摘要，突出关键信息和行动项。
