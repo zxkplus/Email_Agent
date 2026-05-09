@@ -2,24 +2,33 @@ import os
 import json
 from datetime import datetime
 from dotenv import load_dotenv
-from gmail_client import GmailClient
 from email_classifier import EmailClassifier, EmailSummarizer, LLMFactory
 
 load_dotenv()
 
 class EmailAgent:
-    def __init__(self, provider: str = None, model: str = None):
+    def __init__(self, email_provider=None, llm_provider=None, llm_model=None):
         """
         邮件整理Agent
         
         Args:
-            provider: 模型提供商，不填则从环境变量读取
-            model: 模型名称，不填则使用提供商默认
+            email_provider: 邮箱提供商 (gmail / qqmail)
+            llm_provider: 模型提供商，不填则从环境变量读取
+            llm_model: 模型名称，不填则使用提供商默认
         """
-        self.gmail = GmailClient()
+        # 选择邮箱客户端
+        self.email_provider = email_provider or os.getenv("EMAIL_PROVIDER", "gmail")
+        
+        if self.email_provider.lower() == "qqmail":
+            from qqmail_client import QQMailClient
+            self.mail_client = QQMailClient()
+        else:
+            from gmail_client import GmailClient
+            self.mail_client = GmailClient()
+        
         # 使用指定的模型
-        self.classifier = EmailClassifier(provider=provider, model=model)
-        self.summarizer = EmailSummarizer(provider=provider, model=model)
+        self.classifier = EmailClassifier(provider=llm_provider, model=llm_model)
+        self.summarizer = EmailSummarizer(provider=llm_provider, model=llm_model)
         self.stats = {
             'total': 0,
             'spam': 0,
@@ -28,9 +37,9 @@ class EmailAgent:
         }
         self.important_emails_summary = []
         
-        # 打印当前使用的模型
-        current_provider = provider or os.getenv("LLM_PROVIDER", "openai")
-        print(f"🤖 使用模型提供商: {current_provider.upper()}")
+        # 打印配置
+        print(f"📧 使用邮箱: {self.email_provider.upper()}")
+        print(f"🤖 使用模型: {llm_provider or os.getenv('LLM_PROVIDER', 'openai').upper()}")
         
     def process_emails(self, max_emails=20):
         """处理邮件"""
@@ -40,7 +49,7 @@ class EmailAgent:
         
         # 获取未读邮件
         print(f"\n🔍 正在获取未读邮件...")
-        emails = self.gmail.get_unread_emails(max_emails)
+        emails = self.mail_client.get_unread_emails(max_emails)
         
         if not emails:
             print("✅ 没有未读邮件需要处理")
@@ -70,22 +79,22 @@ class EmailAgent:
     
     def _process_classification(self, email, classification):
         """根据分类执行操作"""
-        msg_id = email['id']
+        msg_id = email['msg_id']
         
         if classification.category == "spam":
             # 标记为垃圾邮件
-            if classification.confidence > 0.8:  # 高置信度才自动标记
-                self.gmail.mark_as_spam(msg_id)
+            if classification.confidence > 0.8:
+                self.mail_client.mark_as_spam(msg_id)
                 print("    ✅ 已自动标记为垃圾邮件")
             else:
-                self.gmail.apply_label(msg_id, "🤔疑似垃圾")
+                self.mail_client.apply_label(msg_id, "🤔疑似垃圾")
                 print("    ⚠️ 置信度较低，已标记为【疑似垃圾】待人工确认")
             self.stats['spam'] += 1
             
         elif classification.category == "important":
             # 重要邮件处理
-            self.gmail.apply_label(msg_id, "⭐重要通知")
-            self.gmail.apply_label(msg_id, "📌待处理")  # 保留待处理标签
+            self.mail_client.apply_label(msg_id, "⭐重要通知")
+            self.mail_client.apply_label(msg_id, "📌待处理")
             
             # 生成摘要
             summary = self.summarizer.summarize(email)
@@ -101,18 +110,18 @@ class EmailAgent:
             self.stats['important'] += 1
             
         else:  # normal
-            # 正常邮件按发件人归档
+            # 正常邮件归档
             sender_name = email['sender'].split('<')[0].strip()
             if len(sender_name) > 30:
                 sender_name = sender_name[:30]
             
             label_name = f"👥交流/{sender_name}"
-            self.gmail.apply_label(msg_id, label_name)
+            self.mail_client.apply_label(msg_id, label_name)
             print(f"    ✅ 已归档到【{label_name}】")
             self.stats['normal'] += 1
         
         # 标记为已读
-        self.gmail.mark_as_read(msg_id)
+        self.mail_client.mark_as_read(msg_id)
     
     def _generate_report(self):
         """生成处理报告"""
@@ -129,7 +138,6 @@ class EmailAgent:
             print("⭐ 重要邮件摘要")
             print("=" * 60)
             
-            # 按优先级排序
             self.important_emails_summary.sort(key=lambda x: x['priority'], reverse=True)
             
             for i, email in enumerate(self.important_emails_summary, 1):
@@ -138,9 +146,9 @@ class EmailAgent:
                 print(f"    发件人: {email['sender']}")
                 print(f"    摘要: {email['summary']}")
         
-        # 保存报告到文件
         report = {
             'timestamp': datetime.now().isoformat(),
+            'email_provider': self.email_provider,
             'stats': self.stats,
             'important_emails': self.important_emails_summary
         }
@@ -151,11 +159,8 @@ class EmailAgent:
         print(f"\n💾 详细报告已保存到: email_processing_report.json")
 
 def main():
-    # 可以在这里指定模型，也可以什么都不传，从环境变量读取
-    agent = EmailAgent()  # 默认从 .env 配置
-    # agent = EmailAgent(provider="deepseek")  # 强制使用 DeepSeek
-    # agent = EmailAgent(provider="openai", model="gpt-4")  # 指定提供商和具体模型
-    
+    # 自动从环境变量读取配置
+    agent = EmailAgent()
     agent.process_emails(max_emails=20)
 
 if __name__ == "__main__":
