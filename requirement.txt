@@ -1,7 +1,7 @@
 # 核心AI框架
-langchain>=0.0.350
-langchain-openai>=0.0.2
-openai>=1.0.0
+langchain
+langchain-openai
+openai
 
 # Gmail API
 google-api-python-client>=2.100.0
@@ -11,6 +11,7 @@ google-auth-oauthlib>=1.1.0
 # 邮件解析
 beautifulsoup4>=4.12.0
 python-dotenv>=1.0.0
+html2text>=2020.1.16
 
 # 数据处理
 pydantic>=2.0.0
@@ -21,3 +22,4 @@ schedule>=1.2.0
 
 # 其他
 requests>=2.31.0
+
