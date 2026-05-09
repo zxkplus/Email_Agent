@@ -57,6 +57,18 @@ class QQMailClient:
     def _encode_folder_name(self, folder_name):
         """将文件夹名称编码为IMAP兼容的UTF-7格式"""
         if isinstance(folder_name, str):
+            # 规范化文件夹名称，移除或替换可能导致IMAP问题的字符
+            import re
+            # 移除开头和结尾的空格
+            folder_name = folder_name.strip()
+            # 将连续的空格替换为单个下划线
+            folder_name = re.sub(r'\s+', '_', folder_name)
+            # 移除或替换其他可能导致问题的特殊字符
+            # 保留字母、数字、中文、下划线、点号、连字符
+            folder_name = re.sub(r'[^\w\u4e00-\u9fff._-]', '', folder_name)
+            # 确保文件夹名不为空
+            if not folder_name:
+                folder_name = "default"
             # IMAP要求使用修改版UTF-7编码
             return folder_name.encode('utf-7').decode('ascii')
         return folder_name
