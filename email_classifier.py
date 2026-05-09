@@ -1,8 +1,8 @@
 import os
 from dotenv import load_dotenv
-from langchain.chat_models import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 
@@ -139,7 +139,7 @@ class EmailClassifier:
             format_instructions=self.parser.get_format_instructions()
         )
         
-        output = self.llm(prompt_input.to_messages())
+        output = self.llm.invoke(prompt_input.to_messages())
         
         try:
             result = self.parser.parse(output.content)
@@ -176,5 +176,5 @@ class EmailSummarizer:
             body=email_data['body']
         )
         
-        output = self.llm(prompt_input.to_messages())
+        output = self.llm.invoke(prompt_input.to_messages())
         return output.content
