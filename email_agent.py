@@ -115,7 +115,9 @@ class EmailAgent:
             if len(sender_name) > 30:
                 sender_name = sender_name[:30]
             
-            label_name = f"👥交流/{sender_name}"
+            # QQ邮箱使用点号作为文件夹分隔符，其他邮箱使用斜杠
+            separator = "." if self.email_provider.lower() == "qqmail" else "/"
+            label_name = f"👥交流.{sender_name}"
             self.mail_client.apply_label(msg_id, label_name)
             print(f"    ✅ 已归档到【{label_name}】")
             self.stats['normal'] += 1

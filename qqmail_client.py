@@ -203,13 +203,13 @@ class QQMailClient:
         # 确保文件夹存在 - 需要对文件夹名进行编码
         encoded_folder = self._encode_folder_name(folder_name)
         try:
-            # 如果文件夹路径包含斜杠，需要逐级创建父文件夹
-            if '/' in folder_name:
-                parts = folder_name.split('/')
+            # 如果文件夹路径包含点号，需要逐级创建父文件夹（QQ邮箱使用点号作为层级分隔符）
+            if '.' in folder_name:
+                parts = folder_name.split('.')
                 current_path = ''
                 for part in parts:
                     if current_path:
-                        current_path += '/' + part
+                        current_path += '.' + part
                     else:
                         current_path = part
                     encoded_current = self._encode_folder_name(current_path)
